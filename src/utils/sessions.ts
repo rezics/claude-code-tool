@@ -1,6 +1,26 @@
 import { join } from "path";
 import { readdirSync, rmSync, existsSync } from "fs";
 
+export interface MessagePreview {
+  role: "user" | "assistant";
+  timestamp: string | null;
+  preview: string;
+}
+
+export interface SessionDetail {
+  sessionId: string;
+  slug: string | null;
+  timestamp: string | null;
+  lastTimestamp: string | null;
+  messageCount: number;
+  userMessageCount: number;
+  assistantMessageCount: number;
+  firstUserMessage: string;
+  gitBranch: string | null;
+  messages: MessagePreview[];
+  fileSizeBytes: number;
+}
+
 export interface SessionSummary {
   sessionId: string;
   slug: string | null;
@@ -126,6 +146,83 @@ export async function getSessionSummary(
   }
 
   return summary;
+}
+
+export async function getSessionDetail(
+  projectDir: string,
+  sessionId: string
+): Promise<SessionDetail> {
+  const filePath = join(projectDir, `${sessionId}.jsonl`);
+  const file = Bun.file(filePath);
+  const text = await file.text();
+  const lines = text.split("\n").filter((l) => l.trim());
+
+  const detail: SessionDetail = {
+    sessionId,
+    slug: null,
+    timestamp: null,
+    lastTimestamp: null,
+    messageCount: 0,
+    userMessageCount: 0,
+    assistantMessageCount: 0,
+    firstUserMessage: "",
+    gitBranch: null,
+    messages: [],
+    fileSizeBytes: file.size,
+  };
+
+  let foundFirstUserMessage = false;
+
+  for (const line of lines) {
+    let entry: any;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    if (!detail.slug && entry.slug) {
+      detail.slug = entry.slug;
+    }
+
+    if (!detail.gitBranch && entry.gitBranch) {
+      detail.gitBranch = entry.gitBranch;
+    }
+
+    if (entry.timestamp) {
+      detail.lastTimestamp = entry.timestamp;
+    }
+
+    if (entry.type === "user" || entry.type === "assistant") {
+      detail.messageCount++;
+      if (entry.type === "user") detail.userMessageCount++;
+      if (entry.type === "assistant") detail.assistantMessageCount++;
+
+      if (!entry.isMeta && entry.message?.content) {
+        const text = extractTextContent(entry.message.content);
+        if (text) {
+          detail.messages.push({
+            role: entry.type,
+            timestamp: entry.timestamp ?? null,
+            preview: text.slice(0, 200),
+          });
+        }
+      }
+
+      if (
+        !foundFirstUserMessage &&
+        entry.type === "user" &&
+        entry.message?.role === "user" &&
+        !entry.isMeta
+      ) {
+        detail.timestamp = entry.timestamp ?? null;
+        detail.firstUserMessage = extractTextContent(entry.message.content);
+        foundFirstUserMessage = true;
+      }
+    }
+  }
+
+  return detail;
 }
 
 export function resolveSessionId(
