@@ -2,12 +2,39 @@ import { defineCommand } from "citty";
 import { getProjectDir } from "../utils/paths";
 import { listSessions, getSessionSummary } from "../utils/sessions";
 
+const DEFAULT_LIST_LIMIT = 20;
+
 export default defineCommand({
   meta: {
     name: "list",
     description: "List all sessions for the current project",
   },
-  run: async () => {
+  args: {
+    limit: {
+      type: "string",
+      description: `Maximum number of sessions to show (default: ${DEFAULT_LIST_LIMIT})`,
+      alias: "n",
+    },
+    all: {
+      type: "boolean",
+      description: "Show all sessions without any row cap",
+      alias: "a",
+    },
+  },
+  run: async ({ args }) => {
+    const showAll = args.all === true;
+    let limit = DEFAULT_LIST_LIMIT;
+    if (!showAll && args.limit !== undefined) {
+      const parsed = Number(args.limit);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        console.error(
+          `Error: --limit must be a positive integer (got "${args.limit}").`
+        );
+        process.exit(1);
+      }
+      limit = parsed;
+    }
+
     const projectDir = getProjectDir();
     const sessionIds = listSessions(projectDir);
 
@@ -27,6 +54,10 @@ export default defineCommand({
       return tb.localeCompare(ta);
     });
 
+    const total = summaries.length;
+    const rows = showAll ? summaries : summaries.slice(0, limit);
+    const omitted = total - rows.length;
+
     // Header
     console.log(
       padRight("ID", 10) +
@@ -38,7 +69,7 @@ export default defineCommand({
     );
     console.log("-".repeat(110));
 
-    for (const s of summaries) {
+    for (const s of rows) {
       const date = s.timestamp
         ? new Date(s.timestamp).toISOString().slice(0, 16).replace("T", " ")
         : "unknown";
@@ -54,7 +85,13 @@ export default defineCommand({
       );
     }
 
-    console.log(`\n${summaries.length} session(s) total.`);
+    if (omitted > 0) {
+      console.log(
+        `\n${rows.length} of ${total} session(s) — ${omitted} hidden, use --all to show all.`
+      );
+    } else {
+      console.log(`\n${total} session(s) total.`);
+    }
   },
 });
 

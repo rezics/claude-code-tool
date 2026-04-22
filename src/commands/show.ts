@@ -13,8 +13,39 @@ export default defineCommand({
       description: "Session ID (full UUID or prefix)",
       required: true,
     },
+    last: {
+      type: "string",
+      description: "Render only the last N messages of the timeline",
+    },
+    head: {
+      type: "string",
+      description: "Render only the first N messages of the timeline",
+    },
   },
   run: async ({ args }) => {
+    if (args.last !== undefined && args.head !== undefined) {
+      console.error(
+        "Error: --last and --head are mutually exclusive; pass only one."
+      );
+      process.exit(1);
+    }
+
+    const parsePositiveInt = (raw: string, flag: string): number => {
+      const parsed = Number(raw);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        console.error(
+          `Error: ${flag} must be a positive integer (got "${raw}").`
+        );
+        process.exit(1);
+      }
+      return parsed;
+    };
+
+    let lastN: number | undefined;
+    let headN: number | undefined;
+    if (args.last !== undefined) lastN = parsePositiveInt(args.last, "--last");
+    if (args.head !== undefined) headN = parsePositiveInt(args.head, "--head");
+
     const projectDir = getProjectDir();
     const fullId = resolveSessionId(projectDir, args.sessionId);
     const detail = await getSessionDetail(projectDir, fullId);
@@ -45,8 +76,16 @@ export default defineCommand({
 
     // Conversation timeline
     if (detail.messages.length > 0) {
-      console.log(`\n--- Conversation Timeline (${detail.messages.length} messages) ---\n`);
-      for (let i = 0; i < detail.messages.length; i++) {
+      const total = detail.messages.length;
+      let startIdx = 0;
+      let endIdx = total;
+      if (lastN !== undefined) {
+        startIdx = Math.max(0, total - lastN);
+      } else if (headN !== undefined) {
+        endIdx = Math.min(total, headN);
+      }
+      console.log(`\n--- Conversation Timeline (${total} messages) ---\n`);
+      for (let i = startIdx; i < endIdx; i++) {
         const msg = detail.messages[i];
         const time = msg.timestamp
           ? new Date(msg.timestamp).toISOString().slice(11, 19)
