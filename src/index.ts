@@ -11,10 +11,11 @@ const main = defineCommand({
     show: () => import("./commands/show").then((m) => m.default),
     delete: () => import("./commands/delete").then((m) => m.default),
     resume: () => import("./commands/resume").then((m) => m.default),
+    web: () => import("./commands/web").then((m) => m.default),
   },
   run: async ({ rawArgs }) => {
     // Only run default list when no subcommand is given
-    const subCommandNames = ["list", "show", "delete", "resume"];
+    const subCommandNames = ["list", "show", "delete", "resume", "web"];
     const hasSubCommand = rawArgs.some((arg: string) => subCommandNames.includes(arg));
     if (!hasSubCommand) {
       const { default: listCmd } = await import("./commands/list");

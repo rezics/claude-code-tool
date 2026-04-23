@@ -5,6 +5,7 @@ export interface MessagePreview {
   role: "user" | "assistant";
   timestamp: string | null;
   preview: string;
+  text: string;
 }
 
 export interface SessionDetail {
@@ -56,7 +57,7 @@ function cleanMessageContent(text: string): string {
     .trim();
 }
 
-function extractTextContent(content: unknown): string {
+export function extractTextContent(content: unknown): string {
   if (typeof content === "string") {
     return cleanMessageContent(content);
   }
@@ -68,6 +69,33 @@ function extractTextContent(content: unknown): string {
     }
   }
   return "";
+}
+
+export function extractRawText(content: unknown): string {
+  if (typeof content === "string") {
+    return rawMessageContent(content);
+  }
+  if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const block of content) {
+      if (block?.type === "text" && typeof block.text === "string") {
+        parts.push(rawMessageContent(block.text));
+      }
+    }
+    return parts.join("\n\n");
+  }
+  return "";
+}
+
+function rawMessageContent(text: string): string {
+  const nameMatch = text.match(/<command-name>\/?([^<]+)<\/command-name>/);
+  const argsMatch = text.match(/<command-args>([^<]*)<\/command-args>/);
+  if (nameMatch) {
+    const name = nameMatch[1].trim();
+    const args = argsMatch ? argsMatch[1].trim() : "";
+    return args ? `/${name} ${args}` : `/${name}`;
+  }
+  return text;
 }
 
 export async function getSessionSummary(
@@ -199,12 +227,14 @@ export async function getSessionDetail(
       if (entry.type === "assistant") detail.assistantMessageCount++;
 
       if (!entry.isMeta && entry.message?.content) {
-        const text = extractTextContent(entry.message.content);
-        if (text) {
+        const cleaned = extractTextContent(entry.message.content);
+        const full = extractRawText(entry.message.content);
+        if (cleaned || full) {
           detail.messages.push({
             role: entry.type,
             timestamp: entry.timestamp ?? null,
-            preview: text.slice(0, 200),
+            preview: cleaned.slice(0, 200),
+            text: full || cleaned,
           });
         }
       }

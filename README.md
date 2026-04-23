@@ -1,8 +1,20 @@
 # claude-code-tool
 
-A CLI tool to manage local Claude Code sessions. Built with [citty](https://github.com/unjs/citty) and [Bun](https://bun.sh).
+A CLI *and* local web UI for managing Claude Code sessions. Built with [citty](https://github.com/unjs/citty), [Bun](https://bun.sh), and [HTMX](https://htmx.org).
 
-Automatically detects your OS and maps the current working directory to its corresponding Claude Code project, giving you an overview of all sessions with summaries.
+The CLI maps the current working directory to its corresponding Claude Code project and gives you an overview of all sessions with summaries. The `web` subcommand starts a loopback-only HTTP server with a browsable UI — useful for reading long conversations with rendered markdown, searching across sessions, and cross-project navigation.
+
+## CLI vs Web
+
+| Task                          | Reach for     |
+| ----------------------------- | ------------- |
+| Quick glance at recent work   | `list`        |
+| One-line summaries in scripts | `list --all`  |
+| Resume a session in terminal  | `resume <id>` |
+| Delete one session            | `delete <id>` |
+| Read a long conversation      | `web`         |
+| Search across sessions        | `web`         |
+| Jump between projects         | `web`         |
 
 ## Prerequisites
 
@@ -114,6 +126,37 @@ claude-code-tool resume <sessionId>
 
 Launches `claude --resume <sessionId>` with full terminal control.
 
+### Web UI
+
+```bash
+claude-code-tool web
+# → Serving at http://127.0.0.1:4719
+```
+
+Starts a local HTTP server (loopback-only by default) and opens your browser. Features:
+
+- **Projects index** — every project discovered under `~/.claude/projects/`, ordered by most recent activity. Click to drill in.
+- **Per-project session list** — 50 sessions per page with a "Load more" button; markdown-rendered summaries.
+- **Session detail** — every message in full, with fenced code blocks rendered in `<pre><code>`. Message content is HTML-escaped before markdown parsing; `<script>` in user content cannot execute.
+- **Search** — case-insensitive substring search across session contents, scoped to the current project by default or widened to "all projects". Up to 50 ranked results with ±40-char context snippets.
+- **Resume in terminal** — each session detail page shows a copy-to-clipboard `claude --resume <id>` command. (The web UI does not spawn terminals; use the CLI `resume` for that.)
+- **Delete** — per-row or from session detail, with an HTMX confirmation prompt. Uses the same deletion logic as the CLI.
+- **Refresh projects** — a small ↻ control in the top bar busts the in-memory project cache after you create a new session outside the server's original view.
+
+#### Flags
+
+```bash
+claude-code-tool web --port 8080      # explicit port (fails fast if busy)
+claude-code-tool web --host 0.0.0.0   # expose on LAN (prints a warning)
+claude-code-tool web --no-open        # don't launch the browser
+```
+
+- Default host is `127.0.0.1`. Overriding to a non-loopback address prints a warning because session contents may include source code and sensitive discussions.
+- Default port is `4719`. If busy and you did NOT pass `--port`, the server picks an ephemeral port. If you DID pass `--port` and it's busy, the server exits non-zero.
+- Press Ctrl+C for a clean shutdown.
+
+The server has no authentication. Do not expose it on a network you don't control.
+
 ### Help
 
 ```bash
@@ -139,4 +182,5 @@ bun run bin/cli.ts
 bun run bin/cli.ts list
 bun run bin/cli.ts delete <id>
 bun run bin/cli.ts resume <id>
+bun run bin/cli.ts web
 ```
